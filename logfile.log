@@ -1,3 +1,0 @@
-[2025-04-14T16:15:34.972083+02:00] edifact_logger.INFO: Dosya işleniyor: INVOIC.txt [] []
-[2025-04-14T16:15:34.974498+02:00] edifact_logger.INFO: Dosya archive klasörüne kopyalandı: INVOIC.txt [] []
-[2025-04-14T16:15:34.975316+02:00] edifact_logger.INFO: Dosya outbox klasörüne yazıldı: INVOIC.txt [] []
