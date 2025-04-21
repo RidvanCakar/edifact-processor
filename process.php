@@ -12,7 +12,7 @@ $log = new Logger('edifact');
 $log->pushHandler(new StreamHandler($_ENV['LOG_FILE'], Logger::DEBUG));
 $log->pushHandler(new StreamHandler('php://stdout', Logger::DEBUG)); // terminale de yaz
 
-$log->info("Script başlatıldı.");
+$log->info("işlem başlatıldı.");
 
 // Klasör yolları
 $inbox = $_ENV['INBOX_DIR'];
@@ -21,26 +21,22 @@ $archive = $_ENV['ARCHIVE_DIR'];
 $error = $_ENV['ERROR_DIR'];
 
 // XML dosyalarını oku
-$log->info("Inbox klasörü kontrol ediliyor: $inbox");
+$log->info("Inbox klasörü kontrol ediliyor");
 $files = glob($inbox . '/*.XML');
+$files = glob($inbox . '/*.xml');
 
 if (empty($files)) {
     $log->warning("Inbox klasöründe işlenecek XML dosyası bulunamadı.");
-    exit("Inbox boş, işlem yok.\n");
 }
 
 foreach ($files as $file) {
     $filename = basename($file);
-    $log->info("İşleme alınıyor: $filename");
+    $log->info("Dosya bulundu. işleme alınacak dosyanın adı: $filename");
 
     try {
         $xml = simplexml_load_file($file);
 
-        if (!$xml) {
-            throw new Exception("XML geçersiz veya okunamadı.");
-        }
-
-        $log->info("XML başarıyla yüklendi: $filename");
+        $log->info("XML başarıyla yüklendi. Yüklenen dosyanın adı: $filename");
 
         $ediString = convertXmlToEdifact($xml, $log);
 
@@ -48,7 +44,7 @@ foreach ($files as $file) {
         $ediPath = $outbox . '/' . $ediFilename;
 
         file_put_contents($ediPath, $ediString);
-        $log->info("EDIFACT dosyası outbox'a yazıldı: $ediFilename");
+        $log->info("EDIFACT dosyası outbox'a yazıldı. yazılan dosyanın adı: $ediFilename");
 
         // XML dosyasını archive klasörüne taşı
         $archivedPath = $archive . '/' . $filename;
@@ -73,7 +69,7 @@ $log->info("Tüm işlemler tamamlandı.");
 
 
 
-// ✅ SEGMENT SEGMENT EDIFACT ÜRETEN FONKSİYON
+//  SEGMENT SEGMENT EDIFACT ÜRETEN FONKSİYON
 function convertXmlToEdifact(SimpleXMLElement $xml, Logger $log): string {
     $header = $xml->OrderHeader;
     $details = $xml->OrderDetails->Detail;
@@ -89,39 +85,36 @@ function convertXmlToEdifact(SimpleXMLElement $xml, Logger $log): string {
     $segments[] = "DTM+137:{$header->OrderDate}:102'";
     $segments[] = "FTX+ZZZ+++{$header->FreeTextField}'";
 
-    $log->info("Header segmentleri oluşturuldu.");
-
-    // NAD (sabit içerik + GLN’ler)
-    $segments[] = "NAD+BY+{$header->GLNBuyer}::9++BRICOSTORE ROMANIA S.A.+Calea Giulesti, Nr. 1-3, Sector 6+BUCURESTI++060251+RO'";
-    $segments[] = "NAD+DP+{$header->GLNShipTo}::9++DEPOZIT BANEASA \\ 1616+Soseaua Bucuresti-Ploiesti, nr. 42-+BUCURESTI++013696+RO'";
-    $segments[] = "NAD+SU+{$header->GLNSupplier}::9++STANLEY BLACK & DECKER ROMANIA SRL +TURTURELELOR, PHOENICIA BUSSINESS C+BUCURESTI++30881+RO'";
+    // NAD RFF, CUX, TDT
+    $segments[] = "NAD+BY+{$header->GLNBuyer}::9++BRICOSTORE ROMANIA S.A.+Calea Giulesti, Nr. 1-3, Sector 6+BUCURESTI++060251+{$header->Currency}'";
+    $segments[] = "NAD+DP+{$header->GLNShipTo}::9++DEPOZIT BANEASA \\ 1616+Soseaua Bucuresti-Ploiesti, nr. 42-+BUCURESTI++013696+{$header->Currency}'";
+    $segments[] = "NAD+SU+{$header->GLNSupplier}::9++STANLEY BLACK & DECKER ROMANIA SRL +TURTURELELOR, PHOENICIA BUSSINESS C+BUCURESTI++30881+{$header->Currency}'";
 
     $segments[] = "RFF+API:47362'";
     $segments[] = "CUX+2:{$header->Currency}:9'";
     $segments[] = "TDT+12++:'";
 
-    $log->info("Adres ve para birimi segmentleri eklendi.");
 
     // Ürünler (LIN, PIA, IMD, QTY, DTM, PRI)
     $lineCount = 0;
     foreach ($details as $detail) {
         $lineCount++;
-        $segments[] = "LIN+{$lineCount}++{$detail->ItemEanBarcode}:EN'";
+        $segments[] = "LIN+{$detail->DetailNumber}++{$detail->ItemEanBarcode}:EN'";
         $segments[] = "PIA+1+:IN::92'";
         $segments[] = "PIA+1+{$detail->ItemReceiverCode}:SA::91'";
         $segments[] = "IMD+F++:::{$detail->ItemDescription}'";
-        $segments[] = "QTY+21:" . number_format((float)$detail->ItemOrderedQuantity, 2, '.', '') . ":{$detail->ItemOrderedQuantityUom}'";
+        $segments[] = "QTY+21:{$detail->ItemOrderedQuantity}:{$detail->ItemOrderedQuantityUom}'";
         $segments[] = "DTM+2:{$header->DeliveryDate}:102'";
         $segments[] = "PRI+AAA:{$detail->ItemNetPrice}::::{$detail->ItemOrderedQuantityUom}'";
 
-        $log->info("Ürün satırı işlendi: {$detail->ItemDescription}");
     }
 
+    // DiĞER sabitler
     $segments[] = "UNS+S'";
     $segments[] = "CNT+2:$lineCount'";
     $segments[] = "UNT+" . (count($segments) - 2) . "+$messageRef'";
     $segments[] = "UNZ+1+$interchangeRef'";
 
-    $log->info("Segment sayısı: " . count($segments));
+    $log->info("Dönüşüm işlemi yapıldı. " );
     return implode("\n", $segments);
 }
